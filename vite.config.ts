@@ -1,16 +1,7 @@
 import { defineConfig } from 'vite'
 
-// Frankfurter is CORS-enabled, so the WebView can hit it directly in production.
-// In dev we still proxy through Vite to avoid CORS preflight friction.
-export default defineConfig(() => {
-  return {
-    server: {
-      host: true,
-      port: 5173,
-      strictPort: true,
-      proxy: {
-        '/frankfurter': { target: 'https://api.frankfurter.app', changeOrigin: true, secure: true, rewrite: (p) => p.replace(/^\/frankfurter/, '') },
-      },
-    },
-  }
-})
+// In dev we hit the public worker directly — it sends CORS headers, so no
+// rewrites are needed. The packaged build does the same thing.
+export default defineConfig(() => ({
+  server: { host: true, port: 5173, strictPort: true },
+}))

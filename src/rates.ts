@@ -1,25 +1,28 @@
 /**
- * Exchange-rate fetcher — calls Frankfurter directly (no backend).
+ * Exchange-rate fetcher — calls our Cloudflare Workers proxy.
  *
- * Frankfurter is CORS-enabled and free (no API key). It returns ECB reference
- * rates, so its "today" is usually the previous business-day EOD. We cache the
- * payload in LocalStorage so we only hit the network when needed.
+ * Why a proxy instead of api.frankfurter.app directly:
+ *   Some WebView environments (notably the Even Realities review tester)
+ *   reported CORS / network failures hitting Frankfurter directly. Going
+ *   through the proxy guarantees CORS headers and lets us cache the daily
+ *   payload server-side as well.
+ *
+ * Worker endpoint:
+ *   GET https://currency-g2-proxy.evde.workers.dev/rates
+ *   -> { base: "JPY", date: "YYYY-MM-DD", rates: { USD: 0.0063, ... } }
  */
 export interface RatesPayload {
   base: string
-  date: string             // YYYY-MM-DD (Frankfurter's date)
+  date: string
   rates: Record<string, number>
-  fetchedAt: number        // client-side epoch ms
+  fetchedAt: number
 }
 
 const STORAGE_KEY = 'g2-currency-hub.rates.v1'
-const BASE_CCY = 'JPY'
-const SYMBOLS = ['USD','EUR','GBP','CNY','KRW','THB','SGD','AUD','HKD']
 
 const ENV = ((import.meta as unknown as { env?: Record<string, string> }).env) ?? {}
-// In dev Vite proxies /frankfurter -> api.frankfurter.app to avoid CORS friction.
-// In packaged builds we hit the real origin directly (Frankfurter sends CORS).
-const FX_BASE = ENV.DEV ? '/frankfurter' : 'https://api.frankfurter.app'
+// In dev, we hit the proxy directly (Vite no longer rewrites /frankfurter).
+const PROXY_BASE = ENV.VITE_API_BASE ?? 'https://currency-g2-proxy.evde.workers.dev'
 
 function todayYmd(): string {
   const d = new Date()
@@ -40,12 +43,11 @@ function saveCache(p: RatesPayload): void {
 }
 
 export async function fetchRates(): Promise<RatesPayload> {
-  const url = `${FX_BASE}/latest?from=${BASE_CCY}&to=${SYMBOLS.join(',')}`
-  const r = await fetch(url)
-  if (!r.ok) throw new Error(`frankfurter HTTP ${r.status}`)
+  const r = await fetch(`${PROXY_BASE}/rates`)
+  if (!r.ok) throw new Error(`rates HTTP ${r.status}`)
   const body = (await r.json()) as { base?: string; date?: string; rates?: Record<string, number> }
   const payload: RatesPayload = {
-    base: body.base ?? BASE_CCY,
+    base: body.base ?? 'JPY',
     date: body.date ?? todayYmd(),
     rates: body.rates ?? {},
     fetchedAt: Date.now(),
@@ -73,8 +75,6 @@ export function unitRate(src: string, tgt: string, rates: RatesPayload): number 
 }
 
 export function isStale(p: RatesPayload): boolean {
-  // Frankfurter publishes ECB rates with up to one business-day lag, so we treat
-  // "stale" as 3+ days old to avoid false positives on weekends.
   const d = new Date(p.date + 'T00:00:00Z').getTime()
   return (Date.now() - d) > 3 * 24 * 60 * 60 * 1000
 }

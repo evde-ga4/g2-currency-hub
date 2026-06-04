@@ -2,17 +2,20 @@
   "package_id": "com.ga4.currencyhud",
   "edition": "202601",
   "name": "Currency HUD",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "min_app_version": "2.0.0",
   "min_sdk_version": "0.0.10",
   "entrypoint": "index.html",
   "permissions": [
     {
       "name": "network",
-      "desc": "Fetches FX rates from Frankfurter (api.frankfurter.app). When you supply a Groq API key in the phone settings, the app also sends your recorded voice to Groq's Whisper API (api.groq.com) for speech recognition.",
+      "desc": "Fetches FX rates via our Cloudflare Workers proxy (currency-g2-proxy.evde.workers.dev) that caches Frankfurter/ECB data. With a user-provided Groq key, voice audio is sent to api.groq.com. Phone settings also link to groq.com and frankfurter.app for reference.",
       "whitelist": [
-        "https://api.frankfurter.app",
-        "https://api.groq.com"
+        "https://currency-g2-proxy.evde.workers.dev",
+        "https://api.groq.com",
+        "https://console.groq.com",
+        "https://groq.com",
+        "https://www.frankfurter.app"
       ]
     },
     {
