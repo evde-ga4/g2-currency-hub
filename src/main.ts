@@ -189,10 +189,12 @@ function menuItems(): string[] {
 async function showMenu(): Promise<void> {
   view = 'menu'
   listIndex = 0
+  // No disclaimer footer — keep the main screen clean. The "not financial
+  // advice" notice lives in PRIVACY.md and the store description.
   await bridge.rebuildPageContainer(new RebuildPageContainer({
-    containerTotalNum: 3,
-    textObject: [headerContainer(pairCaption(), 70), hintContainer(L().disclaimer)],
-    listObject: [listContainer(menuItems(), 76, 174)],
+    containerTotalNum: 2,
+    textObject: [headerContainer(pairCaption(), 70)],
+    listObject: [listContainer(menuItems(), 76, 210)],
   }))
   setHostStatus('menu')
 }
