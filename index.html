@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Currency HUD</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        margin: 0; padding: 20px 18px 40px;
+        max-width: 560px; color: #1a1a1a;
+        background: #f7f7f7;
+      }
+      @media (prefers-color-scheme: dark) {
+        body { background: #111; color: #eee; }
+        .card { background: #1c1c1e; }
+        input[type=password], input[type=text], select { background: #2a2a2c; color: #eee; border-color: #444; }
+        .muted { color: #999; }
+        a { color: #6cb6ff; }
+      }
+      h1 { font-size: 22px; margin: 0 0 4px; }
+      .sub { color: #666; font-size: 13px; margin-bottom: 18px; }
+      .muted { color: #777; font-size: 13px; line-height: 1.5; }
+      .card {
+        background: #fff; border-radius: 14px; padding: 16px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04); margin-bottom: 14px;
+      }
+      label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 15px; }
+      input[type=password], input[type=text], select {
+        width: 100%; font-size: 16px; padding: 10px 12px;
+        border: 1px solid #d0d0d0; border-radius: 9px;
+        box-sizing: border-box; appearance: none;
+      }
+      .row { display: flex; gap: 8px; margin-top: 10px; }
+      button {
+        flex: 1; font-size: 15px; padding: 10px 14px;
+        border-radius: 9px; border: 1px solid transparent;
+        background: #0a84ff; color: #fff; font-weight: 600;
+        cursor: pointer;
+      }
+      button.secondary { background: transparent; color: #0a84ff; border-color: #0a84ff; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .status { padding: 8px 12px; border-radius: 8px; font-size: 14px; margin-top: 10px; }
+      .ok { background: rgba(0,180,80,0.12); color: #0a7c30; }
+      .warn { background: rgba(255,150,0,0.12); color: #a35d00; }
+      .err { background: rgba(220,30,40,0.12); color: #b00018; }
+      a { color: #0a84ff; }
+      .footer { font-size: 12px; color: #888; margin-top: 24px; }
+      .toggle { font-size: 13px; color: #666; cursor: pointer; user-select: none; margin-top: 6px; display: inline-block; }
+      .lang-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+      .lang-row label { font-weight: 600; margin: 0; font-size: 14px; white-space: nowrap; }
+      .lang-row select { flex: 1; max-width: 200px; padding: 6px 10px; font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <div class="lang-row">
+      <label for="lang">🌐</label>
+      <select id="lang"></select>
+    </div>
+
+    <h1 id="appTitle">Currency HUD</h1>
+    <div class="sub" id="phoneSubtitle"></div>
+
+    <div class="card">
+      <label id="apiKeyLabel" for="key"></label>
+      <input id="key" type="password" autocomplete="off" spellcheck="false" />
+      <span class="toggle" id="reveal"></span>
+      <div class="row">
+        <button id="save"></button>
+        <button id="clear" class="secondary"></button>
+      </div>
+      <div id="status" class="status"></div>
+    </div>
+
+    <div class="card">
+      <div class="muted" id="cardBody"></div>
+    </div>
+
+    <p id="bridgeStatus" class="muted"></p>
+    <p class="footer" id="footer"></p>
+
+    <script type="module">
+      // Phone-side i18n — keep this in sync with src/i18n.ts.
+      const LANGS = [
+        { code: 'en',    native: 'English' },
+        { code: 'ja',    native: '日本語' },
+        { code: 'zh-CN', native: '简体中文' },
+        { code: 'de',    native: 'Deutsch' },
+        { code: 'ko',    native: '한국어' },
+        { code: 'es',    native: 'Español' },
+        { code: 'fr',    native: 'Français' },
+      ]
+      const LANG_KEY = 'g2-currency-hub.lang.v1'
+      const KEY = 'g2-currency-hub.groq-key.v1'
+
+      // Minimal phone-side string table. Keep only what the panel needs.
+      const T = {
+        en: {
+          appTitle: 'Currency HUD',
+          sub: 'Configure voice input for your Even G2.',
+          label: 'Groq API key (optional)',
+          show: 'Show', hide: 'Hide', save: 'Save', clear: 'Clear',
+          enabled: (p) => `Voice enabled · key saved (${p}…)`,
+          disabled: 'Voice disabled · no key set',
+          pasteFirst: 'Please paste your gsk_... key first.',
+          badKey: 'That does not look like a Groq key (should start with gsk_).',
+          intro: (g) => `Voice input uses ${g}'s Whisper API with <strong>your own API key</strong>. Audio is sent directly from the Even app to Groq — never to us.`,
+          how: 'How to get a key (free, 1 min):',
+          s1: (link) => `1. Open ${link} on this phone or a computer`,
+          s2: '2. Sign in with Google or GitHub',
+          s3: '3. "Create API Key" → copy the <code>gsk_...</code> string',
+          s4: '4. Paste it above and tap <strong>Save</strong>',
+          without: 'Without a key, Voice will show a setup reminder. Keypad input still works fine.',
+          boot: 'Booting bridge…',
+          footer: (link) => `Currency HUD · <a href="./PRIVACY.md">Privacy</a><br>Rates from ${link} (ECB). Info only — not financial advice.`,
+        },
+        ja: {
+          appTitle: 'Currency HUD',
+          sub: 'Even G2 の音声入力を設定します。',
+          label: 'Groq API キー（任意）',
+          show: '表示', hide: '隠す', save: '保存', clear: 'クリア',
+          enabled: (p) => `音声有効 · キー保存済 (${p}…)`,
+          disabled: '音声は無効です · キー未設定',
+          pasteFirst: 'まず gsk_... のキーを貼り付けてください。',
+          badKey: 'Groq キーではないようです（gsk_ で始まるはず）。',
+          intro: (g) => `音声入力は ${g} の Whisper API を <strong>ご自身の API キー</strong> で利用します。音声は Even App から直接 Groq に送信されます。`,
+          how: 'キーの取得方法（無料・1 分）:',
+          s1: (link) => `1. ${link} をスマホかPCで開く`,
+          s2: '2. Google または GitHub でサインイン',
+          s3: '3. "Create API Key" → <code>gsk_...</code> をコピー',
+          s4: '4. 上の欄に貼り付けて <strong>保存</strong>',
+          without: 'キーが無い場合、Voice はセットアップ案内を表示します。Keypad 入力は引き続き使えます。',
+          boot: 'ブリッジ起動中…',
+          footer: (link) => `Currency HUD · <a href="./PRIVACY.md">プライバシー</a><br>レートは ${link}（ECB）から。参考情報のみ、投資助言ではありません。`,
+        },
+        'zh-CN': {
+          appTitle: 'Currency HUD',
+          sub: '为您的 Even G2 配置语音输入。',
+          label: 'Groq API 密钥（可选）',
+          show: '显示', hide: '隐藏', save: '保存', clear: '清除',
+          enabled: (p) => `语音已启用 · 密钥已保存 (${p}…)`,
+          disabled: '语音已禁用 · 未设置密钥',
+          pasteFirst: '请先粘贴您的 gsk_... 密钥。',
+          badKey: '看起来不是 Groq 密钥（应以 gsk_ 开头）。',
+          intro: (g) => `语音输入通过 ${g} 的 Whisper API，使用<strong>您自己的 API 密钥</strong>。音频从 Even App 直接发送到 Groq。`,
+          how: '获取密钥（免费,1 分钟）:',
+          s1: (link) => `1. 在手机或电脑上打开 ${link}`,
+          s2: '2. 使用 Google 或 GitHub 登录',
+          s3: '3. "Create API Key" → 复制 <code>gsk_...</code> 字符串',
+          s4: '4. 粘贴到上方并点击 <strong>保存</strong>',
+          without: '没有密钥时,语音会显示设置提示。键盘输入依然可用。',
+          boot: '正在启动桥接…',
+          footer: (link) => `Currency HUD · <a href="./PRIVACY.md">隐私</a><br>汇率来自 ${link}（欧洲央行）。仅供参考,不构成投资建议。`,
+        },
+        de: {
+          appTitle: 'Currency HUD',
+          sub: 'Spracheingabe für deine Even G2 einrichten.',
+          label: 'Groq API-Schlüssel (optional)',
+          show: 'Zeigen', hide: 'Verbergen', save: 'Speichern', clear: 'Löschen',
+          enabled: (p) => `Sprache aktiv · Schlüssel gespeichert (${p}…)`,
+          disabled: 'Sprache deaktiviert · kein Schlüssel',
+          pasteFirst: 'Bitte zuerst den gsk_... Schlüssel einfügen.',
+          badKey: 'Das sieht nicht nach einem Groq-Schlüssel aus (sollte mit gsk_ beginnen).',
+          intro: (g) => `Spracheingabe nutzt ${g}s Whisper-API mit <strong>deinem eigenen API-Schlüssel</strong>. Audio geht direkt von Even an Groq.`,
+          how: 'So bekommst du einen Schlüssel (kostenlos, 1 Min):',
+          s1: (link) => `1. ${link} auf Handy oder Computer öffnen`,
+          s2: '2. Mit Google oder GitHub anmelden',
+          s3: '3. "Create API Key" → <code>gsk_...</code> kopieren',
+          s4: '4. Oben einfügen und auf <strong>Speichern</strong> tippen',
+          without: 'Ohne Schlüssel zeigt Sprache einen Einrichtungshinweis. Tastatur funktioniert weiterhin.',
+          boot: 'Bridge wird gestartet…',
+          footer: (link) => `Currency HUD · <a href="./PRIVACY.md">Datenschutz</a><br>Kurse von ${link} (EZB). Nur Information — keine Anlageberatung.`,
+        },
+        ko: {
+          appTitle: 'Currency HUD',
+          sub: 'Even G2의 음성 입력을 설정합니다.',
+          label: 'Groq API 키 (선택)',
+          show: '표시', hide: '숨기기', save: '저장', clear: '지우기',
+          enabled: (p) => `음성 사용 가능 · 키 저장됨 (${p}…)`,
+          disabled: '음성 비활성화 · 키 없음',
+          pasteFirst: '먼저 gsk_... 키를 붙여넣어 주세요.',
+          badKey: 'Groq 키가 아닌 것 같습니다 (gsk_로 시작해야 합니다).',
+          intro: (g) => `음성 입력은 ${g}의 Whisper API를 <strong>본인의 API 키</strong>로 사용합니다. 오디오는 Even 앱에서 Groq로 직접 전송됩니다.`,
+          how: '키 받기 (무료, 1분):',
+          s1: (link) => `1. 휴대전화나 컴퓨터에서 ${link} 열기`,
+          s2: '2. Google 또는 GitHub으로 로그인',
+          s3: '3. "Create API Key" → <code>gsk_...</code> 문자열 복사',
+          s4: '4. 위에 붙여넣고 <strong>저장</strong> 탭',
+          without: '키가 없으면 음성에서 설정 안내가 표시됩니다. 키패드는 정상 작동합니다.',
+          boot: '브리지 시작 중…',
+          footer: (link) => `Currency HUD · <a href="./PRIVACY.md">개인정보</a><br>환율 출처: ${link} (ECB). 참고용 — 투자 조언이 아닙니다.`,
+        },
+        es: {
+          appTitle: 'Currency HUD',
+          sub: 'Configura la entrada de voz para tu Even G2.',
+          label: 'Clave API de Groq (opcional)',
+          show: 'Mostrar', hide: 'Ocultar', save: 'Guardar', clear: 'Borrar',
+          enabled: (p) => `Voz activa · clave guardada (${p}…)`,
+          disabled: 'Voz desactivada · sin clave',
+          pasteFirst: 'Pega primero tu clave gsk_...',
+          badKey: 'No parece una clave Groq (debería empezar con gsk_).',
+          intro: (g) => `La entrada de voz usa la API Whisper de ${g} con <strong>tu propia clave API</strong>. El audio se envía directamente desde la app Even a Groq.`,
+          how: 'Cómo obtener una clave (gratis, 1 min):',
+          s1: (link) => `1. Abre ${link} en tu teléfono o computadora`,
+          s2: '2. Inicia sesión con Google o GitHub',
+          s3: '3. "Create API Key" → copia la cadena <code>gsk_...</code>',
+          s4: '4. Pégala arriba y toca <strong>Guardar</strong>',
+          without: 'Sin clave, Voz mostrará un recordatorio de configuración. El Teclado funciona igual.',
+          boot: 'Iniciando puente…',
+          footer: (link) => `Currency HUD · <a href="./PRIVACY.md">Privacidad</a><br>Tasas de ${link} (BCE). Solo informativo — no es consejo financiero.`,
+        },
+        fr: {
+          appTitle: 'Currency HUD',
+          sub: 'Configure la saisie vocale pour ton Even G2.',
+          label: 'Clé API Groq (optionnel)',
+          show: 'Afficher', hide: 'Masquer', save: 'Enregistrer', clear: 'Effacer',
+          enabled: (p) => `Voix activée · clé enregistrée (${p}…)`,
+          disabled: 'Voix désactivée · aucune clé',
+          pasteFirst: "Colle d'abord ta clé gsk_...",
+          badKey: 'Cela ne ressemble pas à une clé Groq (devrait commencer par gsk_).',
+          intro: (g) => `La saisie vocale utilise l'API Whisper de ${g} avec <strong>ta propre clé API</strong>. L'audio est envoyé directement depuis l'appli Even à Groq.`,
+          how: 'Comment obtenir une clé (gratuit, 1 min) :',
+          s1: (link) => `1. Ouvre ${link} sur ton téléphone ou un ordinateur`,
+          s2: '2. Connecte-toi avec Google ou GitHub',
+          s3: '3. "Create API Key" → copie la chaîne <code>gsk_...</code>',
+          s4: '4. Colle-la ci-dessus et tape sur <strong>Enregistrer</strong>',
+          without: 'Sans clé, Voix affiche un rappel de configuration. Le Clavier fonctionne toujours.',
+          boot: 'Initialisation du pont…',
+          footer: (link) => `Currency HUD · <a href="./PRIVACY.md">Confidentialité</a><br>Taux de ${link} (BCE). Information seulement — pas un conseil financier.`,
+        },
+      }
+
+      function detect() {
+        try {
+          const saved = localStorage.getItem(LANG_KEY)
+          if (saved && T[saved]) return saved
+        } catch {}
+        const nav = (navigator.language || 'en').toLowerCase()
+        if (nav.startsWith('ja')) return 'ja'
+        if (nav.startsWith('zh')) return 'zh-CN'
+        if (nav.startsWith('de')) return 'de'
+        if (nav.startsWith('ko')) return 'ko'
+        if (nav.startsWith('es')) return 'es'
+        if (nav.startsWith('fr')) return 'fr'
+        return 'en'
+      }
+
+      let lang = detect()
+
+      const inp = document.getElementById('key')
+      const reveal = document.getElementById('reveal')
+      const saveBtn = document.getElementById('save')
+      const clearBtn = document.getElementById('clear')
+      const status = document.getElementById('status')
+      const langSel = document.getElementById('lang')
+
+      function render() {
+        const t = T[lang]
+        document.documentElement.lang = lang
+        document.getElementById('appTitle').textContent = t.appTitle
+        document.getElementById('phoneSubtitle').textContent = t.sub
+        document.getElementById('apiKeyLabel').textContent = t.label
+        inp.placeholder = 'gsk_...'
+        reveal.textContent = inp.type === 'password' ? t.show : t.hide
+        saveBtn.textContent = t.save
+        clearBtn.textContent = t.clear
+        document.getElementById('cardBody').innerHTML = [
+          t.intro('<a href="https://groq.com" target="_blank">Groq</a>'),
+          '<br><br><strong>' + t.how + '</strong><br>',
+          t.s1('<a href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a>'),
+          '<br>', t.s2, '<br>', t.s3, '<br>', t.s4,
+          '<br><br>', t.without,
+        ].join('')
+        document.getElementById('bridgeStatus').textContent = t.boot
+        document.getElementById('footer').innerHTML = t.footer('<a href="https://www.frankfurter.app/" target="_blank">Frankfurter</a>')
+        refreshStatus()
+      }
+      function refreshStatus() {
+        const t = T[lang]
+        const k = localStorage.getItem(KEY) || ''
+        if (k) { status.textContent = t.enabled(k.slice(0, 7)); status.className = 'status ok' }
+        else { status.textContent = t.disabled; status.className = 'status warn' }
+      }
+
+      // Populate language picker
+      LANGS.forEach((l) => {
+        const opt = document.createElement('option')
+        opt.value = l.code; opt.textContent = l.native
+        if (l.code === lang) opt.selected = true
+        langSel.appendChild(opt)
+      })
+      langSel.addEventListener('change', () => {
+        lang = langSel.value
+        try { localStorage.setItem(LANG_KEY, lang) } catch {}
+        render()
+      })
+
+      reveal.addEventListener('click', () => {
+        if (inp.type === 'password') { inp.type = 'text'; reveal.textContent = T[lang].hide }
+        else { inp.type = 'password'; reveal.textContent = T[lang].show }
+      })
+      saveBtn.addEventListener('click', () => {
+        const v = inp.value.trim()
+        const t = T[lang]
+        if (!v) { status.textContent = t.pasteFirst; status.className = 'status err'; return }
+        if (!v.startsWith('gsk_')) { status.textContent = t.badKey; status.className = 'status err'; return }
+        localStorage.setItem(KEY, v)
+        inp.value = ''
+        refreshStatus()
+      })
+      clearBtn.addEventListener('click', () => {
+        localStorage.removeItem(KEY); inp.value = ''
+        refreshStatus()
+      })
+
+      render()
+    </script>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

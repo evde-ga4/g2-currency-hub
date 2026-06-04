@@ -1,0 +1,32 @@
+{
+  "package_id": "com.ga4.currencyhud",
+  "edition": "202601",
+  "name": "Currency HUD",
+  "version": "0.1.0",
+  "min_app_version": "2.0.0",
+  "min_sdk_version": "0.0.10",
+  "entrypoint": "index.html",
+  "permissions": [
+    {
+      "name": "network",
+      "desc": "Fetches FX rates from Frankfurter (api.frankfurter.app). When you supply a Groq API key in the phone settings, the app also sends your recorded voice to Groq's Whisper API (api.groq.com) for speech recognition.",
+      "whitelist": [
+        "https://api.frankfurter.app",
+        "https://api.groq.com"
+      ]
+    },
+    {
+      "name": "g2-microphone",
+      "desc": "Used only when you tap Voice and have configured a Groq API key. The recording is sent over HTTPS to api.groq.com for transcription with your own key. Audio is discarded after the request."
+    }
+  ],
+  "supported_languages": [
+    "en",
+    "ja",
+    "zh",
+    "de",
+    "ko",
+    "es",
+    "fr"
+  ]
+}
