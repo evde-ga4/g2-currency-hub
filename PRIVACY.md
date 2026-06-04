@@ -47,4 +47,4 @@ your home currency. We collect no personal data and operate no servers of our ow
 
 ## Contact
 
-If you have questions about this policy, contact: ga4@strippers.jp
+If you have questions about this policy, contact: info@evde.jp
